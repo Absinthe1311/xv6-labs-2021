@@ -9,6 +9,7 @@
 /*
  * the kernel's page table.
  */
+// pagetable_t == uint64 *;
 pagetable_t kernel_pagetable;
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
@@ -77,6 +78,8 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+// 在给定的页表pagetable中，查找并返回虚拟地址va对应的页表项(PTE)的地址。
+// 如果alloc参数不为0，则在查找过程中发现中间页表不存在，会自动分配新的页表页
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
