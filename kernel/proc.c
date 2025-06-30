@@ -292,6 +292,9 @@ fork(void)
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
+  // copy trace mask 不知道是否存在问题
+  np->trace_mask = p->trace_mask;
+
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
 
@@ -529,7 +532,6 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -653,4 +655,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// 添加一个返回当前非Used进程数量的函数
+uint
+get_proc_cnt(void)
+{
+  uint count = 0;
+  struct proc *p;
+  for(p=proc;p<&proc[NPROC];p++){
+    if(p->state != UNUSED){
+      count++;
+    }
+  }
+  return count;
 }

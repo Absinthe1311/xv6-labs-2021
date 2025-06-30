@@ -9,7 +9,7 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
-// bio.c
+// bio.c        文件系统的磁盘块缓存
 void            binit(void);
 struct buf*     bread(uint, uint);
 void            brelse(struct buf*);
@@ -17,15 +17,15 @@ void            bwrite(struct buf*);
 void            bpin(struct buf*);
 void            bunpin(struct buf*);
 
-// console.c
+// console.c    连接到用户的键盘和屏幕
 void            consoleinit(void);
 void            consoleintr(int);
 void            consputc(int);
 
-// exec.c
+// exec.c       exec()系统调用
 int             exec(char*, char**);
 
-// file.c
+// file.c       文件描述符支持
 struct file*    filealloc(void);
 void            fileclose(struct file*);
 struct file*    filedup(struct file*);
@@ -34,7 +34,7 @@ int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
 
-// fs.c
+// fs.c         文件系统
 void            fsinit(int);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
@@ -59,10 +59,11 @@ void            ramdiskinit(void);
 void            ramdiskintr(void);
 void            ramdiskrw(struct buf*);
 
-// kalloc.c
+// kalloc.c     物理页面分配器
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+uint64          get_fremem();
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -104,6 +105,7 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+uint            get_proc_cnt(void);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

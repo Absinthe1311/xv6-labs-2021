@@ -3,3 +3,4 @@
 #define O_RDWR    0x002
 #define O_CREATE  0x200
 #define O_TRUNC   0x400
+// 这里定义的是文件的操作方式

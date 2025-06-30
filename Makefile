@@ -193,8 +193,13 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-
-
+	$U/_sleep\
+	$U/_pingpong\
+	$U/_primes\
+	$U/_find\
+	$U/_xargs\
+	$U/_trace\
+	$U/_sysinfotest\
 
 
 ifeq ($(LAB),$(filter $(LAB), pgtbl lock))
@@ -275,7 +280,8 @@ clean:
 	ph barrier
 
 # try to generate a unique GDB port
-GDBPORT = $(shell expr `id -u` % 5000 + 25000)
+# GDBPORT = $(shell expr `id -u` % 5000 + 25000)
+GDBPORT = $(shell expr `id -u` % 5000 + 25001)
 # QEMU's gdb stub command line changed in 0.11
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \

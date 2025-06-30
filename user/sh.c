@@ -79,10 +79,10 @@ runcmd(struct cmd *cmd)
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 
-  case REDIR:
+  case REDIR: // 处理重定向
     rcmd = (struct redircmd*)cmd;
-    close(rcmd->fd);
-    if(open(rcmd->file, rcmd->mode) < 0){
+    close(rcmd->fd); // 关闭重定向命令的文件描述符
+    if(open(rcmd->file, rcmd->mode) < 0){ // 打开重定向的文件，这样close得到的空闲文件描述符会指向这个打开的文件
       fprintf(2, "open %s failed\n", rcmd->file);
       exit(1);
     }
@@ -131,7 +131,7 @@ runcmd(struct cmd *cmd)
 }
 
 int
-getcmd(char *buf, int nbuf)
+getcmd(char *buf, int nbuf) // 通过这个函数读取用户的输入
 {
   fprintf(2, "$ ");
   memset(buf, 0, nbuf);
@@ -146,7 +146,7 @@ main(void)
 {
   static char buf[100];
   int fd;
-
+  // 始终要确保有三个文件描述符是打开的，分别是标准输入、标准输出、标准错误
   // Ensure that three file descriptors are open.
   while((fd = open("console", O_RDWR)) >= 0){
     if(fd >= 3){
@@ -157,14 +157,14 @@ main(void)
 
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
-    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){ // 当读取到的命令是 cd 时
       // Chdir must be called by the parent, not the child.
       buf[strlen(buf)-1] = 0;  // chop \n
       if(chdir(buf+3) < 0)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
-    if(fork1() == 0)
+    if(fork1() == 0) // 读取到的不是cd命令，创建一个子进程来执行
       runcmd(parsecmd(buf));
     wait(0);
   }
