@@ -8,6 +8,7 @@
 
 /*
  * the kernel's page table.
+ * 内核的页表，全局唯一
  */
 pagetable_t kernel_pagetable;
 
@@ -16,13 +17,15 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 extern char trampoline[]; // trampoline.S
 
 // Make a direct-map page table for the kernel.
+// 创建并初始化内核页表，映射相关内容
+// 返回新建的内核页表指针
 pagetable_t
 kvmmake(void)
 {
   pagetable_t kpgtbl;
 
-  kpgtbl = (pagetable_t) kalloc();
-  memset(kpgtbl, 0, PGSIZE);
+  kpgtbl = (pagetable_t) kalloc(); // 分配一个物理页
+  memset(kpgtbl, 0, PGSIZE); // 将这个物理页清零
 
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
@@ -50,6 +53,7 @@ kvmmake(void)
 }
 
 // Initialize the one kernel_pagetable
+// 调用kvmmake()，建立并初始化内核页表
 void
 kvminit(void)
 {
@@ -58,11 +62,12 @@ kvminit(void)
 
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
+// 让当前CPU(hart)切换到内核页表，并刷新TLP，使虚拟内存管理生效
 void
 kvminithart()
 {
-  w_satp(MAKE_SATP(kernel_pagetable));
-  sfence_vma();
+  w_satp(MAKE_SATP(kernel_pagetable)); // 将物理地址转换格式，并放到satp里面
+  sfence_vma(); // 一个用于刷新TLB的指令，清除所有虚拟地址到物理地址的映射
 }
 
 // Return the address of the PTE in page table pagetable
@@ -77,6 +82,7 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+// 用于查找或创建虚拟地址VA的页表项，常用于内存映射，查找物理页等操作
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
@@ -123,6 +129,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
+// 内核页表的映射函数
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
@@ -217,6 +224,7 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
+// 为用户进程分配新的虚拟内存空间
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
@@ -226,14 +234,15 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   if(newsz < oldsz)
     return oldsz;
 
-  oldsz = PGROUNDUP(oldsz);
+  oldsz = PGROUNDUP(oldsz); // 这一段我不知道是什么意思
   for(a = oldsz; a < newsz; a += PGSIZE){
-    mem = kalloc();
+    mem = kalloc(); // 通过kalloc分配一个物理页，物理地址
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
+    // 通过mappages将物理页映射到页表下对应的虚拟地址空间
     if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
       kfree(mem);
       uvmdealloc(pagetable, a, oldsz);

@@ -43,6 +43,7 @@ freerange(void *pa_start, void *pa_end)
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
+// 接受一个虚拟地址，找到对应的物理地址进行释放
 void
 kfree(void *pa)
 {
@@ -65,6 +66,7 @@ kfree(void *pa)
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
+// 在需要的时候分配物理内存页，返回的应该是物理页的物理地址
 void *
 kalloc(void)
 {

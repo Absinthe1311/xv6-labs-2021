@@ -101,6 +101,7 @@ allocpid() {
 // If found, initialize state required to run in the kernel,
 // and return with p->lock held.
 // If there are no free procs, or a memory allocation fails, return 0.
+// 在所有的进程表里面找一个没有使用的进程，找到的话就成功分配
 static struct proc*
 allocproc(void)
 {
@@ -116,16 +117,24 @@ allocproc(void)
   }
   return 0;
 
-found:
-  p->pid = allocpid();
-  p->state = USED;
+found:  //找到了一个没有使用的进程
+  p->pid = allocpid(); // 分配pid
+  p->state = USED; // 修改状态
 
-  // Allocate a trapframe page.
+  // Allocate a trapframe page. 
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
   }
+
+  // Allocate a usyscall page
+  if((p->usyscallpage = (struct usyscall *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  p->usyscallpage->pid = p->pid;
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -153,6 +162,9 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if(p->usyscallpage)
+    kfree((void*)p->usyscallpage);
+  p->usyscallpage = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -196,6 +208,14 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  // map the usyscall page 
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+              (uint64)(p->usyscallpage), PTE_R|PTE_U)< 0){
+    uvmunmap(pagetable, USYSCALL, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+    }
+
   return pagetable;
 }
 
@@ -206,6 +226,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -249,6 +270,8 @@ userinit(void)
 
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
+// 这个函数用于增加或减少用户进程的内存空间
+// 根据n的正负来选择调用uvmalloc或uvmdealloc函数
 int
 growproc(int n)
 {
