@@ -77,6 +77,8 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+// 传入页表，虚拟地址，是否分配flag
+// 返回pte表项
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
@@ -303,7 +305,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -312,13 +314,26 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+
+    if(*pte & PTE_W) // 当要复制的页面是可写的时候，将这个页面的pte修改为pte_f,
+    {
+      flags = (flags & ~PTE_W) | PTE_F; 
+      *pte = PA2PTE(pa) | flags;
+    }
+
+    if(mappages(new, i, PGSIZE, pa, flags)!=0) // map失败
+    {
       goto err;
     }
+    // map 成功，添加引用数量
+    kaddrefcnt((char*)pa);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    // if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+    //   kfree(mem);
+    //   goto err;
+    // }
   }
   return 0;
 
@@ -351,6 +366,12 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
+
+    if(cowpage(pagetable,va0)) // 如果要复制到cow页，就要新创建一页供它复制
+    {
+      pa0 = (uint64)cowalloc(pagetable,PGROUNDDOWN(va0));
+    }
+
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
