@@ -94,9 +94,9 @@ bread(uint dev, uint blockno)
 {
   struct buf *b;
 
-  b = bget(dev, blockno);
+  b = bget(dev, blockno); // 如果在bcache中缓存有这个块的内容就返回这个块的内容，没有就会分配一块buf，并且将valid设置为0
   if(!b->valid) {
-    virtio_disk_rw(b, 0);
+    virtio_disk_rw(b, 0); // 在前面valid为0时，这个时候就要通过这个函数将要读取的文件真正加载进来
     b->valid = 1;
   }
   return b;
@@ -108,7 +108,7 @@ bwrite(struct buf *b)
 {
   if(!holdingsleep(&b->lock))
     panic("bwrite");
-  virtio_disk_rw(b, 1);
+  virtio_disk_rw(b, 1); // 将buf写入磁盘
 }
 
 // Release a locked buffer.

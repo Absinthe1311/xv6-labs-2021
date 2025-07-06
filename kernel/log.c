@@ -32,25 +32,28 @@
 
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
+// 记录本次日志（事务）中涉及的磁盘块编号
 struct logheader {
-  int n;
-  int block[LOGSIZE];
+  int n;              // 本次日志涉及的磁盘块数量
+  int block[LOGSIZE]; // 本次日志涉及的所有磁盘块编号数组
 };
 
+// 管理整个日志系统的状态
 struct log {
   struct spinlock lock;
-  int start;
-  int size;
+  int start;      // 日志区域在磁盘块上的起始块号
+  int size;       // 日志区域的块数
   int outstanding; // how many FS sys calls are executing.
-  int committing;  // in commit(), please wait.
-  int dev;
-  struct logheader lh;
+  int committing;  // in commit(), please wait. 是否在提交日志
+  int dev;        // 日志所在的设备号
+  struct logheader lh; // 当前内存中的日志头
 };
 struct log log;
 
 static void recover_from_log(void);
 static void commit();
 
+// 在文件系统初始化时调用，传入设备号，超级块指针
 void
 initlog(int dev, struct superblock *sb)
 {
@@ -123,6 +126,7 @@ recover_from_log(void)
 }
 
 // called at the start of each FS system call.
+// 表示一次文件系统操作（事务）的开始
 void
 begin_op(void)
 {
@@ -143,6 +147,7 @@ begin_op(void)
 
 // called at the end of each FS system call.
 // commits if this was the last outstanding operation.
+// 表示结束
 void
 end_op(void)
 {
@@ -211,6 +216,7 @@ commit()
 //   modify bp->data[]
 //   log_write(bp)
 //   brelse(bp)
+// 将被修改的缓冲区（磁盘块）加入日志
 void
 log_write(struct buf *b)
 {

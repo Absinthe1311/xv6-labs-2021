@@ -8,6 +8,7 @@
 // This file contains the low-level file system manipulation
 // routines.  The (higher-level) system call implementations
 // are in sysfile.c.
+//实现文件系统的底层操作
 
 #include "types.h"
 #include "riscv.h"
@@ -24,9 +25,11 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
 // only one device
+// 超级块
 struct superblock sb; 
 
 // Read the super block.
+// 读取超级块，初始化sb结构体
 static void
 readsb(int dev, struct superblock *sb)
 {
@@ -38,6 +41,7 @@ readsb(int dev, struct superblock *sb)
 }
 
 // Init fs
+// 文件系统初始化，读取超级块并初始化日志
 void
 fsinit(int dev) {
   readsb(dev, &sb);
@@ -47,6 +51,7 @@ fsinit(int dev) {
 }
 
 // Zero a block.
+// 将指定块清空，用于新分配块的初始化
 static void
 bzero(int dev, int bno)
 {
@@ -61,6 +66,7 @@ bzero(int dev, int bno)
 // Blocks.
 
 // Allocate a zeroed disk block.
+// 分配一个空闲磁盘块，标记为已用，清零，返回块号
 static uint
 balloc(uint dev)
 {
@@ -86,6 +92,7 @@ balloc(uint dev)
 }
 
 // Free a disk block.
+// 释放一个磁盘块，标记为未用
 static void
 bfree(int dev, uint b)
 {
@@ -374,26 +381,58 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
+// 给定一个inode和逻辑块号bn，返回该文件第bn个数据块在磁盘上的物理块号
+// kernel/fs.c
+
+// Return the disk block address of the nth block in inode ip.
+// If there is no such block, bmap allocates one.
+// 根据需要分配块以保存文件内容，如果需要还会分配间接块以保存块地址
+// bn参数是一个逻辑块号，ip->addrs[]和bread()中都是物理块号
 static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
-
-  if(bn < NDIRECT){
+  // 如果是直接映射的话
+  // bn是逻辑块，ip->addrs[bn]就能得到bn对应的物理块在磁盘上的位置
+  if(bn < NDIRECT){  
     if((addr = ip->addrs[bn]) == 0)
-      ip->addrs[bn] = addr = balloc(ip->dev);
+      ip->addrs[bn] = addr = balloc(ip->dev); // 如果没有分配的话就通过balloc分配一个物理块
     return addr;
   }
   bn -= NDIRECT;
 
-  if(bn < NINDIRECT){
+  if(bn < NINDIRECT){ // singly-indirect
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr);
+    bp = bread(ip->dev, addr);  // bread()读取缓冲区的buf
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
+      a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+  bn -= NINDIRECT;
+
+  if(bn < NINDIRECT*NINDIRECT){
+    if((addr=ip->addrs[NDIRECT+1]) == 0) // 拿到第一次读的物理磁盘块号
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr); // 将这个磁盘块中的内容读取到bp,将里面的addr送到a
+    a = (uint*)bp->data; // 看下a里面记录的磁盘块在磁盘上有没有对应的块
+    if((addr = a[bn/NINDIRECT]) == 0)
+    {
+      a[bn/NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp); //将读取的这块buf释放
+    bp = bread(ip->dev,addr); //读取到第二个中间块
+    a = (uint*)bp->data; //得到这个的addr部分
+    bn = bn%NINDIRECT;
+    if((addr = a[bn]) == 0)
+    {
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
     }
@@ -403,6 +442,7 @@ bmap(struct inode *ip, uint bn)
 
   panic("bmap: out of range");
 }
+
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
@@ -431,6 +471,30 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
+  struct buf *bp1;
+  uint* a1;
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NINDIRECT+1]); // 读取第一个中间块
+    a = (uint*)bp->data;
+    for(i=0;i<NINDIRECT;i++) // 逐个访问第一个中间块中的NINDIRECT个二级块
+    {
+      if(a[i]) // 当第i个二级块在
+      {
+        bp1 = bread(ip->dev,a[i]);
+        a1 = (uint*)bp1->data;
+        for(j=0;j<NINDIRECT;j++)
+        {
+          if(a1[j])
+            bfree(ip->dev,a1[j]);
+        }
+        brelse(bp1);
+        bfree(ip->dev,a[i]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev,ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
+  }
 
   ip->size = 0;
   iupdate(ip);
@@ -452,6 +516,7 @@ stati(struct inode *ip, struct stat *st)
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
+// 研究这个
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {

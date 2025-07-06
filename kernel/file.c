@@ -16,9 +16,10 @@
 struct devsw devsw[NDEV];
 struct {
   struct spinlock lock;
-  struct file file[NFILE];
-} ftable;
+  struct file file[NFILE]; 
+} ftable; // 文件表，里面记录了所有的文件（感觉有点像空闲块）
 
+// 初始化文件表用到的锁
 void
 fileinit(void)
 {
@@ -26,6 +27,7 @@ fileinit(void)
 }
 
 // Allocate a file structure.
+// 在文件表里面找一个没有引用的文件，引用设为1并将这个文件返回
 struct file*
 filealloc(void)
 {
@@ -44,6 +46,7 @@ filealloc(void)
 }
 
 // Increment ref count for file f.
+// 增加文件描述符的引用计数
 struct file*
 filedup(struct file *f)
 {
@@ -56,6 +59,7 @@ filedup(struct file *f)
 }
 
 // Close file f.  (Decrement ref count, close when reaches 0.)
+// 关闭文件的时候减少文件描述符，为0时关闭
 void
 fileclose(struct file *f)
 {
@@ -84,6 +88,7 @@ fileclose(struct file *f)
 
 // Get metadata about file f.
 // addr is a user virtual address, pointing to a struct stat.
+// 获取文件的元数据（stat信息），并复制到用户空间addr
 int
 filestat(struct file *f, uint64 addr)
 {
