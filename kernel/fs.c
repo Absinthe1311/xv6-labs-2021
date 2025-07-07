@@ -417,19 +417,42 @@ bmap(struct inode *ip, uint bn)
   }
   bn -= NINDIRECT;
 
-  if(bn < NINDIRECT*NINDIRECT){
-    if((addr=ip->addrs[NDIRECT+1]) == 0) // 拿到第一次读的物理磁盘块号
+  // if(bn < NINDIRECT*NINDIRECT){
+  //   if((addr=ip->addrs[NDIRECT+1]) == 0) // 拿到第一次读的物理磁盘块号
+  //     ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+  //   bp = bread(ip->dev, addr); // 将这个磁盘块中的内容读取到bp,将里面的addr送到a
+  //   a = (uint*)bp->data; // 看下a里面记录的磁盘块在磁盘上有没有对应的块
+  //   if((addr = a[bn/NINDIRECT]) == 0)
+  //   {
+  //     a[bn/NINDIRECT] = addr = balloc(ip->dev);
+  //     log_write(bp);
+  //   }
+  //   brelse(bp); //将读取的这块buf释放
+  //   bp = bread(ip->dev,addr); //读取到第二个中间块
+  //   a = (uint*)bp->data; //得到这个的addr部分
+  //   bn = bn%NINDIRECT;
+  //   if((addr = a[bn]) == 0)
+  //   {
+  //     a[bn] = addr = balloc(ip->dev);
+  //     log_write(bp);
+  //   }
+  //   brelse(bp);
+  //   return addr;
+  // }
+
+    if(bn < NINDIRECT*NINDIRECT){
+    if((addr=ip->addrs[NDIRECT+1]) == 0) 
       ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr); // 将这个磁盘块中的内容读取到bp,将里面的addr送到a
-    a = (uint*)bp->data; // 看下a里面记录的磁盘块在磁盘上有没有对应的块
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data; 
     if((addr = a[bn/NINDIRECT]) == 0)
     {
       a[bn/NINDIRECT] = addr = balloc(ip->dev);
       log_write(bp);
     }
-    brelse(bp); //将读取的这块buf释放
-    bp = bread(ip->dev,addr); //读取到第二个中间块
-    a = (uint*)bp->data; //得到这个的addr部分
+    brelse(bp);
+    bp = bread(ip->dev,addr); 
+    a = (uint*)bp->data; 
     bn = bn%NINDIRECT;
     if((addr = a[bn]) == 0)
     {
@@ -471,16 +494,42 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
-  struct buf *bp1;
+
+  // struct buf *bp1;
+  // uint* a1;
+  // if(ip->addrs[NDIRECT+1]){
+  //   bp = bread(ip->dev, ip->addrs[NINDIRECT+1]);
+  //   a = (uint*)bp->data;
+  //   for(i=0;i<NINDIRECT;i++)
+  //   {
+  //     if(a[i])
+  //     {
+  //       bp1 = bread(ip->dev, a[i]);
+  //       a1 = (uint*)bp1->data;
+  //       for(j=0;j<NINDIRECT;j++)
+  //       {
+  //         if(a1[j])
+  //           bfree(ip->dev,a1[j]);
+  //       }
+  //       brelse(bp1);
+  //       bfree(ip->dev,a[i]);
+  //     }
+  //   }
+  //   brelse(bp);
+  //   bfree(ip->dev,ip->addrs[NDIRECT+1]);
+  //   ip->addrs[NDIRECT+1] = 0;
+  // }
+
+    struct buf *bp1;
   uint* a1;
   if(ip->addrs[NDIRECT+1]){
-    bp = bread(ip->dev, ip->addrs[NINDIRECT+1]); // 读取第一个中间块
+    bp = bread(ip->dev, ip->addrs[NINDIRECT+1]);
     a = (uint*)bp->data;
-    for(i=0;i<NINDIRECT;i++) // 逐个访问第一个中间块中的NINDIRECT个二级块
+    for(i=0;i<NINDIRECT;i++)
     {
-      if(a[i]) // 当第i个二级块在
+      if(a[i])
       {
-        bp1 = bread(ip->dev,a[i]);
+        bp1 = bread(ip->dev, a[i]);
         a1 = (uint*)bp1->data;
         for(j=0;j<NINDIRECT;j++)
         {
@@ -495,6 +544,7 @@ itrunc(struct inode *ip)
     bfree(ip->dev,ip->addrs[NDIRECT+1]);
     ip->addrs[NDIRECT+1] = 0;
   }
+
 
   ip->size = 0;
   iupdate(ip);

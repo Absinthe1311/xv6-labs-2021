@@ -530,34 +530,62 @@ sys_pipe(void)
   return 0;
 }
 
+// uint64
+// sys_symlink(void)
+// {
+//   struct inode *ip;
+//   char target[MAXPATH],path[MAXPATH];
+//   // 获取两个输入的参数
+//   if(argstr(0,target,MAXPATH)<0 || argstr(1,path,MAXPATH)<0)
+//     return -1;
+
+//   begin_op();
+
+//   ip = create(path,T_SYMLINK,0,0); // 创建一个inode给path,路径是path,类型是link
+//   if(ip==0)
+//   {
+//     end_op();
+//     return -1;
+//   }
+
+//   // use the first data block to store the target path
+//   if(writei(ip,0,(uint64)target,0,sizeof(target)) < 0)
+//   {
+//     end_op();
+//     return -1;
+//   }
+
+//   iunlockput(ip);
+
+//   end_op();
+
+//   return 0;
+// }
+
+
 uint64
 sys_symlink(void)
 {
-  struct inode *ip;
+  struct inode*ip;
   char target[MAXPATH],path[MAXPATH];
-  // 获取两个输入的参数
   if(argstr(0,target,MAXPATH)<0 || argstr(1,path,MAXPATH)<0)
     return -1;
-
   begin_op();
+  ip = create(path,T_SYMLINK,0,0);
 
-  ip = create(path,T_SYMLINK,0,0); // 创建一个inode给path,路径是path,类型是link
   if(ip==0)
   {
     end_op();
     return -1;
   }
 
-  // use the first data block to store the target path
-  if(writei(ip,0,(uint64)target,0,sizeof(target)) < 0)
+  if(writei(ip,0,(uint64)target,0,sizeof(target))<0)
   {
     end_op();
     return -1;
   }
 
   iunlockput(ip);
-
   end_op();
-
   return 0;
 }
