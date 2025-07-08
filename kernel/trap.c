@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -27,6 +30,53 @@ void
 trapinithart(void)
 {
   w_stvec((uint64)kernelvec);
+}
+
+int mmap_handler(int va, int cause)
+{
+  int i;
+  struct proc*p = myproc();
+  for(i=0; i<NVMA; ++i)
+  {
+    if(p->vma[i].used && p->vma[i].addr <= va && va <=p->vma[i].addr + p->vma[i].len-1){
+      break;
+    }
+  }
+  if(i == NVMA)
+    return -1;
+  
+  // // set the pte_flags according to the prot
+  // int pte_flags = PTE_U;
+  // if(p->vma[i].prot & PROT_READ) pte_flags |= PTE_R;
+  // if(p->vma[i].prot & PROT_WRITE) pte_flags |= PTE_W;
+  // if(p->vma[i].prot & PROT_EXEC) pte_flags |= PTE_X;
+
+  struct file* vf = p->vma[i].vfile;
+  
+  if(cause == 13 && p->vma[i].vfile->readable == 0) return -1;
+  if(cause == 15 && p->vma[i].vfile->writable == 0) return -1;
+
+  void * pa = kalloc(); // allocate a new physical page
+  if(pa == 0)
+    return -1;
+  memset(pa,0,PGSIZE);
+
+  // read the bytes to physical page
+  ilock(vf->ip);
+  // 得到的是读的inode对应的文件的哪个页面
+  int offset = p->vma[i].offset + PGROUNDDOWN(va-p->vma[i].addr);
+  int readbytes = readi(vf->ip,0,(uint64)pa, offset, PGSIZE);
+  if(readbytes == 0){
+    iunlock(vf->ip);
+    kfree(pa);
+    return -1;
+  }
+  iunlock(vf->ip);
+  if(mappages(p->pagetable,PGROUNDDOWN(va),PGSIZE,(uint64)pa, p->vma[i].prot|PTE_U) != 0){
+    kfree(pa);
+    return -1;
+  }
+  return 0;
 }
 
 //
@@ -67,7 +117,16 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }else if(r_scause() == 13|| r_scause() == 15)
+  {
+    uint64 fault_va = r_stval();
+    if(PGROUNDUP(p->trapframe->sp) - 1 < fault_va && fault_va < p->sz){
+      if(mmap_handler(r_stval(),r_scause())!=0)
+        p->killed = 1;
+    }
+    else p->killed = 1;
+  }
+   else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

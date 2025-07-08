@@ -26,6 +26,18 @@ struct cpu {
   int intena;                 // Were interrupts enabled before push_off()?
 };
 
+// VMA struct
+struct vm_area{
+  int used;     // whether is used
+  uint64 addr;  // map addr xu
+  int len;      // map memory length
+  int prot;     // permissions
+  int flags;    // the map flags
+  int vfd; // file description
+  struct file* vfile; // file
+  int offset;   // offset always 0
+};
+
 extern struct cpu cpus[NCPU];
 
 // per-process data for the trap handling code in trampoline.S.
@@ -82,6 +94,8 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+#define NVMA 16
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -105,4 +119,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  struct vm_area vma[NVMA];  // vma array
 };

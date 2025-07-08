@@ -165,7 +165,7 @@ bad:
   return -1;
 }
 
-// Is the directory dp empty except for "." and ".." ?
+// Is the directory dp empty cept for "." and ".." ?
 static int
 isdirempty(struct inode *dp)
 {
@@ -484,3 +484,107 @@ sys_pipe(void)
   }
   return 0;
 }
+
+// void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
+// addr 默认为0，表示用内核决定把文件映射到哪个虚拟地址
+// length 应该映射的字节数量
+// port 内存映射的权限，读/写/执行
+// flags MAP_SHARED 表示共享，对共享内存的修改会写回文件 MAP_PRIVATE不会
+// fd 文件描述符
+// offset 默认为0
+uint64 sys_mmap(void){
+  uint64 addr;
+  int length;
+  int prot;
+  int flags;
+  int vfd;
+  int offset;
+  struct file* vfile;
+  uint64 err = 0xffffffffffffffff;
+
+  // get the args
+  if(argaddr(0,&addr) < 0 || argint(1,&length) < 0 || argint(2, &prot) < 0
+    || argint(3,&flags) < 0 || argfd(4,&vfd,&vfile) < 0 || argint(5, &offset) < 0)
+    return err;
+  // detect the args
+  if(addr!=0 || offset!=0 || length < 0)
+    return err; 
+  
+  // 文件不可写则不允许拥有Port_Write时映射为MAP_SHARED
+  if(vfile->writable==0 &&(prot & PROT_WRITE) !=0 && flags == MAP_SHARED )
+    return err;
+  
+  struct proc*p = myproc();
+  if(p->sz + length > MAXVA)
+    return err;
+  
+  // find unused vma struct
+  for(int i = 0; i<NVMA; i++)
+  {
+    if(p->vma[i].used == 0)
+    {
+      p->vma[i].used = 1;
+      p->vma[i].addr = p->sz;
+      p->vma[i].len = length;
+      p->vma[i].flags = flags;
+      p->vma[i].offset = 0;
+      p->vma[i].prot = prot;
+      p->vma[i].vfile = vfile;
+      p->vma[i].vfd = vfd;
+
+      filedup(vfile); // add the refcnt
+
+      p->sz += length;
+      return p->vma[i].addr; // return the mapped virtual address
+    }
+  }
+  return err;
+}
+
+uint64
+sys_munmap(void) {
+  uint64 addr;
+  int length;
+  // get the args
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+
+  int i;
+  struct proc* p = myproc();
+  for(i = 0; i < NVMA; ++i) {
+    if(p->vma[i].used && p->vma[i].len >= length) {
+      // 根据提示，munmap的地址范围只能是
+      // 1. 起始位置
+      if(p->vma[i].addr == addr) {
+        p->vma[i].addr += length;
+        p->vma[i].len -= length;
+        break;
+      }
+      // 2. 结束位置
+      if(addr + length == p->vma[i].addr + p->vma[i].len) {
+        p->vma[i].len -= length;
+        break;
+      }
+    }
+  }
+  if(i == NVMA)
+    return -1;
+
+  // 将MAP_SHARED页面写回文件系统
+  if(p->vma[i].flags == MAP_SHARED && (p->vma[i].prot & PROT_WRITE) != 0) {
+    filewrite(p->vma[i].vfile, addr, length);
+  }
+
+  // 判断此页面是否存在映射
+  uvmunmap(p->pagetable, addr, length / PGSIZE, 1);
+
+
+  // 当前VMA中全部映射都被取消
+  if(p->vma[i].len == 0) {
+    fileclose(p->vma[i].vfile);
+    p->vma[i].used = 0;
+  }
+
+  return 0;
+}
+
